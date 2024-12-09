@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strings"
 
 	"github.com/hrntknr/maddr-proxy/pkg/utils"
 	"github.com/vishvananda/netlink"
@@ -17,7 +18,7 @@ const tableMain = 254
 const tableRangeStart = 15100
 const tableRangeEnd = 15199
 
-func SetupRoute(watch bool, iface []string) error {
+func SetupRoute(watch bool, iface []string, gw []string, useHostMinAsGw bool) error {
 	if watch {
 		route := make(chan netlink.RouteUpdate)
 		addr := make(chan netlink.AddrUpdate)
@@ -32,7 +33,7 @@ func SetupRoute(watch bool, iface []string) error {
 			return err
 		}
 		for {
-			if err := ensureSetupRoute(iface); err != nil {
+			if err := ensureSetupRoute(iface, gw, useHostMinAsGw); err != nil {
 				return err
 			}
 			select {
@@ -42,25 +43,29 @@ func SetupRoute(watch bool, iface []string) error {
 			}
 		}
 	} else {
-		return ensureSetupRoute(iface)
+		return ensureSetupRoute(iface, gw, useHostMinAsGw)
 	}
 }
 
-func ensureSetupRoute(iface []string) error {
+func ensureSetupRoute(iface []string, gw []string, useHostMinAsGw bool) error {
 	mapping, err := ensureRules(iface)
 	if err != nil {
 		return err
 	}
-	if err := ensureRoutes(mapping); err != nil {
+	if err := ensureRoutes(mapping, gw, useHostMinAsGw); err != nil {
 		return err
 	}
 	return nil
 }
 
-func ensureRoutes(mapping map[int]map[int]int) error {
+func ensureRoutes(mapping map[int]map[int]int, gw []string, useHostMinAsGw bool) error {
 	for family, m := range mapping {
 		for table, device := range m {
-			if err := ensureRoute(family, table, device); err != nil {
+			gw, err := resolveGw(family, device, gw, useHostMinAsGw)
+			if err != nil {
+				return err
+			}
+			if err := ensureRoute(family, table, device, gw); err != nil {
 				return err
 			}
 		}
@@ -68,7 +73,7 @@ func ensureRoutes(mapping map[int]map[int]int) error {
 	return nil
 }
 
-func ensureRoute(family int, table int, device int) error {
+func ensureRoute(family int, table int, device int, gw net.IP) error {
 	routes, err := getRoutes(family, table)
 	if err != nil {
 		return err
@@ -76,7 +81,12 @@ func ensureRoute(family int, table int, device int) error {
 
 	find := false
 	for _, route := range routes {
-		if isDefaultRoute(route.Dst) {
+		if isDefaultRoute(route.Dst) &&
+			route.LinkIndex == device &&
+			route.Scope == netlink.SCOPE_UNIVERSE &&
+			route.Protocol == iprouteProtocol &&
+			route.Table == table &&
+			route.Gw.Equal(gw) {
 			find = true
 		} else {
 			if err := netlink.RouteDel(&route); err != nil {
@@ -91,6 +101,7 @@ func ensureRoute(family int, table int, device int) error {
 			Scope:     netlink.SCOPE_UNIVERSE,
 			Protocol:  iprouteProtocol,
 			Table:     table,
+			Gw:        gw,
 		}); err != nil {
 			return fmt.Errorf("failed to add route: %w", err)
 		}
@@ -306,4 +317,58 @@ func isDefaultRoute(ipnet *net.IPNet) bool {
 		return true
 	}
 	return false
+}
+
+func resolveGw(family int, device int, gw []string, useHostMinAsGw bool) (net.IP, error) {
+	targetLink, err := netlink.LinkByIndex(device)
+	if err != nil {
+		return nil, err
+	}
+	for _, gw := range gw {
+		i := strings.Index(gw, ",")
+		if i == -1 {
+			ip, err := tryParseIP(gw)
+			if err != nil {
+				return nil, err
+			}
+			return ip, nil
+		}
+		iface := gw[:i]
+		if iface == targetLink.Attrs().Name {
+			ip, err := tryParseIP(gw[i+1:])
+			if err != nil {
+				return nil, err
+			}
+			return ip, nil
+		}
+	}
+	if useHostMinAsGw {
+		addrs, err := netlink.AddrList(targetLink, family)
+		if err != nil {
+			return nil, err
+		}
+		if len(addrs) > 0 {
+			return hostMin(addrs[0].IPNet), nil
+		}
+	}
+	return nil, errors.New("no suitable gateway found")
+
+}
+
+func hostMin(ipnet *net.IPNet) net.IP {
+	ip := make(net.IP, len(ipnet.IP))
+	copy(ip, ipnet.IP)
+	for i := 0; i < len(ip); i++ {
+		ip[i] = ip[i] & ipnet.Mask[i]
+	}
+	ip[len(ip)-1]++
+	return ip
+}
+
+func tryParseIP(ip string) (net.IP, error) {
+	i := net.ParseIP(ip)
+	if i == nil {
+		return nil, errors.New("invalid ip")
+	}
+	return i, nil
 }

@@ -1,55 +1,40 @@
 package main
 
 import (
-	"strings"
-
 	maddrproxy "github.com/hrntknr/maddr-proxy/pkg/maddr-proxy"
 	"github.com/spf13/cobra"
 )
 
-type Config struct {
-	Listen   string
-	Password string
-}
-
 var flagWatch bool
-var flagIface string
+var flagIface []string
+var flagGw []string
+var flagUseHostMinAsGw bool
 var setupRouteCmd = &cobra.Command{
 	Use: "setup-route",
 	Run: func(cmd *cobra.Command, args []string) {
-		ifaceMatch := strings.Split(flagIface, ",")
-		if len(ifaceMatch) == 1 && ifaceMatch[0] == "" {
-			ifaceMatch = []string{}
-		}
-		if err := maddrproxy.SetupRoute(flagWatch, ifaceMatch); err != nil {
+		if err := maddrproxy.SetupRoute(flagWatch, flagIface, flagGw, flagUseHostMinAsGw); err != nil {
 			panic(err)
 		}
 	},
 }
 
 var flagListen string
-var flagPassword string
+var flagPassword []string
 var flagSetupRoute bool
-var flagSetupRouteIface string
+var flagSetupRouteIface []string
+var flagSetupRouteGw []string
+var flagSetupRouteUseHostMinAsGw bool
 var proxyCmd = &cobra.Command{
 	Use: "proxy",
 	Run: func(cmd *cobra.Command, args []string) {
 		if flagSetupRoute {
-			ifaceMatch := strings.Split(flagIface, ",")
-			if len(ifaceMatch) == 1 && ifaceMatch[0] == "" {
-				ifaceMatch = []string{}
-			}
 			go func() {
-				if err := maddrproxy.SetupRoute(true, ifaceMatch); err != nil {
+				if err := maddrproxy.SetupRoute(true, flagSetupRouteIface, flagSetupRouteGw, flagSetupRouteUseHostMinAsGw); err != nil {
 					panic(err)
 				}
 			}()
 		}
-		passwords := strings.Split(flagPassword, ",")
-		if len(passwords) == 1 && passwords[0] == "" {
-			passwords = []string{}
-		}
-		if err := maddrproxy.NewProxy(passwords).ListenAndServe(flagListen); err != nil {
+		if err := maddrproxy.NewProxy(flagPassword).ListenAndServe(flagListen); err != nil {
 			panic(err)
 		}
 	},
@@ -60,12 +45,16 @@ func main() {
 		Use: "maddr-proxy",
 	}
 	setupRouteCmd.Flags().BoolVarP(&flagWatch, "watch", "w", false, "watch")
-	setupRouteCmd.Flags().StringVarP(&flagIface, "iface", "i", "en.*,eth.*", "interface match")
+	setupRouteCmd.Flags().StringSliceVarP(&flagIface, "iface", "i", []string{"en.*", "eth.*"}, "interface")
+	setupRouteCmd.Flags().StringSliceVarP(&flagGw, "gw", "g", []string{}, "gateway")
+	setupRouteCmd.Flags().BoolVarP(&flagUseHostMinAsGw, "use-host-min-as-gw", "", true, "use host min as gateway")
 	rootCmd.AddCommand(setupRouteCmd)
 	proxyCmd.Flags().StringVarP(&flagListen, "listen", "l", ":1080", "listen address")
-	proxyCmd.Flags().StringVarP(&flagPassword, "password", "p", "", "password")
+	proxyCmd.Flags().StringSliceVarP(&flagPassword, "password", "p", []string{}, "password")
 	proxyCmd.Flags().BoolVarP(&flagSetupRoute, "setup-route", "", false, "setup route")
-	proxyCmd.Flags().StringVarP(&flagSetupRouteIface, "setup-route-iface", "", "en.*,eth.*", "interface match")
+	proxyCmd.Flags().StringSliceVarP(&flagSetupRouteIface, "setup-route-iface", "", []string{"en.*", "eth.*"}, "interface")
+	proxyCmd.Flags().StringSliceVarP(&flagSetupRouteGw, "setup-route-gw", "", []string{}, "gateway")
+	proxyCmd.Flags().BoolVarP(&flagSetupRouteUseHostMinAsGw, "setup-route-use-host-min-as-gw", "", true, "use host min as gateway")
 	rootCmd.AddCommand(proxyCmd)
 	if err := rootCmd.Execute(); err != nil {
 		panic(err)
