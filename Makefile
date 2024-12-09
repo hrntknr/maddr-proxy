@@ -10,7 +10,7 @@ all: build run
 build: $(TARGET)
 
 run:
-	./bin/main
+	./bin/main proxy
 
 test:
 	go test ./pkg/...
@@ -19,4 +19,4 @@ clean:
 	rm -rf $(TARGET)
 
 $(TARGET): $(GO_FILES)
-	go build $(GO_LDFLAGS) -tags=viper_bind_struct -o $@ ./cmd/
+	go build $(GO_LDFLAGS) -o $@ ./cmd/

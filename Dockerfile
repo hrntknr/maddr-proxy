@@ -13,3 +13,5 @@ FROM alpine:latest
 COPY --from=builder /app/bin/main /usr/local/bin/maddr-proxy
 
 ENTRYPOINT [ "/usr/local/bin/maddr-proxy" ]
+
+CMD [ "proxy" ]

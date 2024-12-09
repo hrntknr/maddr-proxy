@@ -1,11 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 
 	maddrproxy "github.com/hrntknr/maddr-proxy/pkg/maddr-proxy"
-	"github.com/spf13/viper"
+	"github.com/spf13/cobra"
 )
 
 type Config struct {
@@ -13,36 +12,62 @@ type Config struct {
 	Password string
 }
 
-func main() {
-	if err := run(); err != nil {
-		panic(err)
-	}
+var flagWatch bool
+var flagIface string
+var setupRouteCmd = &cobra.Command{
+	Use: "setup-route",
+	Run: func(cmd *cobra.Command, args []string) {
+		ifaceMatch := strings.Split(flagIface, ",")
+		if len(ifaceMatch) == 1 && ifaceMatch[0] == "" {
+			ifaceMatch = []string{}
+		}
+		if err := maddrproxy.SetupRoute(flagWatch, ifaceMatch); err != nil {
+			panic(err)
+		}
+	},
 }
 
-func run() error {
-	var config Config
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("/etc/maddr-proxy/")
-	viper.AddConfigPath(".")
-	viper.AutomaticEnv()
-	viper.SetDefault("listen", ":1080")
-	viper.ReadInConfig()
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("failed to read config: %w", err)
+var flagListen string
+var flagPassword string
+var flagSetupRoute bool
+var flagSetupRouteIface string
+var proxyCmd = &cobra.Command{
+	Use: "proxy",
+	Run: func(cmd *cobra.Command, args []string) {
+		if flagSetupRoute {
+			ifaceMatch := strings.Split(flagIface, ",")
+			if len(ifaceMatch) == 1 && ifaceMatch[0] == "" {
+				ifaceMatch = []string{}
+			}
+			go func() {
+				if err := maddrproxy.SetupRoute(true, ifaceMatch); err != nil {
+					panic(err)
+				}
+			}()
 		}
-	}
-	if err := viper.Unmarshal(&config); err != nil {
-		return fmt.Errorf("failed to unmarshal config: %w", err)
-	}
+		passwords := strings.Split(flagPassword, ",")
+		if len(passwords) == 1 && passwords[0] == "" {
+			passwords = []string{}
+		}
+		if err := maddrproxy.NewProxy(passwords).ListenAndServe(flagListen); err != nil {
+			panic(err)
+		}
+	},
+}
 
-	passwords := strings.Split(config.Password, ",")
-	if len(passwords) == 1 && passwords[0] == "" {
-		passwords = []string{}
+func main() {
+	rootCmd := &cobra.Command{
+		Use: "maddr-proxy",
 	}
-	if err := maddrproxy.NewProxy(passwords).ListenAndServe(config.Listen); err != nil {
-		return fmt.Errorf("failed to start proxy: %w", err)
+	setupRouteCmd.Flags().BoolVarP(&flagWatch, "watch", "w", false, "watch")
+	setupRouteCmd.Flags().StringVarP(&flagIface, "iface", "i", "en.*,eth.*", "interface match")
+	rootCmd.AddCommand(setupRouteCmd)
+	proxyCmd.Flags().StringVarP(&flagListen, "listen", "l", ":1080", "listen address")
+	proxyCmd.Flags().StringVarP(&flagPassword, "password", "p", "", "password")
+	proxyCmd.Flags().BoolVarP(&flagSetupRoute, "setup-route", "", false, "setup route")
+	proxyCmd.Flags().StringVarP(&flagSetupRouteIface, "setup-route-iface", "", "en.*,eth.*", "interface match")
+	rootCmd.AddCommand(proxyCmd)
+	if err := rootCmd.Execute(); err != nil {
+		panic(err)
 	}
-	return nil
 }

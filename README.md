@@ -46,3 +46,13 @@ curl https://ifconfig.io/ -x http://tcp6:ens3:password@localhost:1080
 curl https://ifconfig.io/ -x http://10.0.0.2:password@localhost:1080
 curl https://ifconfig.io/ -x http://2001:0db8::3456:::password@localhost:1080
 ```
+
+## Notice
+
+This program does not manipulate the routing table.
+Please insert policy based routing settings as needed.
+
+```sh
+ip rule add from 10.64.0.5 table 1001
+ip route add default via 10.64.0.1 dev eth1 table 1001
+```
