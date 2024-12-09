@@ -2,18 +2,27 @@
 
 ## Usage
 
-### Server
+```
+Usage:
+  maddr-proxy proxy [flags]
+
+Flags:
+  -h, --help                       help for proxy
+  -l, --listen string              listen address (default ":1080")
+  -p, --password string            password
+      --setup-route                setup route
+      --setup-route-iface string   interface match (default "en.*,eth.*")
+```
 
 ```
-LISTEN=:1080 PASSWORD=hoge,huga ./maddr-proxy
+Usage:
+  maddr-proxy setup-route [flags]
+
+Flags:
+  -h, --help           help for setup-route
+  -i, --iface string   interface match (default "en.*,eth.*")
+  -w, --watch          watch
 ```
-
-environment variables:
-
-| name     | default |
-| -------- | ------- |
-| LISTEN   | :1080   |
-| PASSWORD |         |
 
 ### Client
 
@@ -45,14 +54,4 @@ curl https://ifconfig.io/ -x http://tcp6:ens3:password@localhost:1080
 # request with address and password
 curl https://ifconfig.io/ -x http://10.0.0.2:password@localhost:1080
 curl https://ifconfig.io/ -x http://2001:0db8::3456:::password@localhost:1080
-```
-
-## Notice
-
-This program does not manipulate the routing table.
-Please insert policy based routing settings as needed.
-
-```sh
-ip rule add from 10.64.0.5 table 1001
-ip route add default via 10.64.0.1 dev eth1 table 1001
 ```
