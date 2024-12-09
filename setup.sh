@@ -8,5 +8,5 @@ if ! dpkg -s docker.io &>/dev/null; then
 fi
 
 if ! docker inspect maddr-proxy &>/dev/null; then
-  docker run -d --name maddr-proxy --network host --restart always ghcr.io/hrntknr/maddr-proxy:latest --password "$PASSWORD" --setup-route
+  docker run -d --name maddr-proxy --network host --privileged --restart always ghcr.io/hrntknr/maddr-proxy:latest --password "$PASSWORD" --setup-route
 fi
