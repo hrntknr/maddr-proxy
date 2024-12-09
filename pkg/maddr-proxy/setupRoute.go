@@ -173,7 +173,7 @@ func getDefaultRouteIface(family int) (int, error) {
 			return route.LinkIndex, nil
 		}
 	}
-	return 0, errors.New("no default route")
+	return 0, nil
 }
 
 func getAddrList(links []netlink.Link, family int) ([]netlink.Addr, error) {
