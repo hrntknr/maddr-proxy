@@ -99,11 +99,12 @@ func (p *proxy) resolve(target string, user string) (net.Addr, string, error) {
 }
 
 func (p *proxy) handleConn(req *http.Request, user string, conn net.Conn) (net.Conn, error) {
-	addr, network, err := p.resolve(req.Host, user)
+	host := p.formatHostPort(req.URL.Host, 443)
+	addr, network, err := p.resolve(host, user)
 	if err != nil {
 		return nil, err
 	}
-	peer, err := utils.GetDialContext(timeout, addr)(context.Background(), network, req.Host)
+	peer, err := utils.GetDialContext(timeout, addr)(context.Background(), network, host)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +114,12 @@ func (p *proxy) handleConn(req *http.Request, user string, conn net.Conn) (net.C
 }
 
 func (p *proxy) handleReq(req *http.Request, user string) (net.Conn, error) {
-	addr, network, err := p.resolve(req.Host, user)
+	host := p.formatHostPort(req.Host, 80)
+	addr, network, err := p.resolve(host, user)
 	if err != nil {
 		return nil, err
 	}
-	peer, err := utils.GetDialContext(timeout, addr)(context.Background(), network, req.Host)
+	peer, err := utils.GetDialContext(timeout, addr)(context.Background(), network, host)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +130,14 @@ func (p *proxy) handleReq(req *http.Request, user string) (net.Conn, error) {
 	}
 
 	return peer, nil
+}
+
+func (p *proxy) formatHostPort(hostStr string, defaultPort uint16) string {
+	host, port, err := net.SplitHostPort(hostStr)
+	if err != nil {
+		return net.JoinHostPort(hostStr, fmt.Sprintf("%d", defaultPort))
+	}
+	return net.JoinHostPort(host, port)
 }
 
 func (p *proxy) serve(w http.ResponseWriter, req *http.Request) {
